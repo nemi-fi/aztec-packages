@@ -62,9 +62,11 @@ class SingleBusLookupRelationImpl {
 
     template <typename AllEntities> inline static bool skip(const AllEntities& in)
     {
-        // Skip when the row is not a read gate, has no read counts on this column, and carries no
-        // value: subrelation (4) is non-trivial on any row with a non-zero value off the support.
-        return in[AllEntities::EntityId::q_busread].is_zero() && in[ReadCountsId].is_zero() && in[ValueId].is_zero();
+        // Skip when the row is not a read gate of this column (q_busread · selector vanishes), has no read counts on
+        // this column, and carries no value: subrelation (4) is non-trivial on any row with a non-zero value off the
+        // support.
+        return (in[AllEntities::EntityId::q_busread].is_zero() || in[SelectorId].is_zero()) &&
+               in[ReadCountsId].is_zero() && in[ValueId].is_zero();
     }
 
     /**
@@ -168,6 +170,50 @@ class SingleBusLookupRelationImpl {
 
         const auto inverses_m = CoefficientAccumulator(in[InversesId]);
         const auto read_counts_m = CoefficientAccumulator(in[ReadCountsId]);
+
+        if constexpr (IsProverAccumulator<Accumulator>) {
+            // A row is typically either a read gate of this column or one of its data rows with a read count, so the
+            // terms carrying the other (identically zero) factor are dropped.
+            const auto q_busread_m = CoefficientAccumulator(in[AllEntities::EntityId::q_busread]);
+            const auto column_selector_m = CoefficientAccumulator(in[SelectorId]);
+            const bool is_read = !q_busread_m.is_zero() && !column_selector_m.is_zero();
+            const bool has_read_counts = !read_counts_m.is_zero();
+
+            const Accumulator inverses(inverses_m);
+            const auto lookup_term = compute_lookup_term<Accumulator>(in, params);
+            const auto table_term = compute_table_term<Accumulator>(in, params);
+            // I·L·T − 1
+            const auto common = lookup_term * table_term * inverses - FF(1);
+
+            Accumulator tmp(0);
+            if (is_read) {
+                const auto read_selector_m = q_busread_m * column_selector_m;
+                // (1a) (I·L·T − 1) · is_read
+                std::get<0>(accumulator) += common * Accumulator(read_selector_m * scaling_factor);
+                tmp = Accumulator(read_selector_m) * table_term;
+            }
+            using ShortAccumulator = typename std::tuple_element_t<3, ContainerOverSubrelations>;
+            const auto indicator_m = CoefficientAccumulator(in[IndicatorId]);
+            const ShortAccumulator indicator_short(indicator_m);
+            if (has_read_counts) {
+                // (1b) (I·L·T − 1) · count
+                std::get<1>(accumulator) += common * Accumulator(read_counts_m * scaling_factor);
+                tmp -= Accumulator(read_counts_m) * lookup_term;
+                // (3) (1 − indicator) · count
+                const ShortAccumulator read_counts_short(read_counts_m);
+                std::get<3>(accumulator) += (read_counts_short - indicator_short * read_counts_short) * scaling_factor;
+            }
+            // (4) (1 − indicator) · value
+            const auto value_m = CoefficientAccumulator(in[ValueId]);
+            if (!value_m.is_zero()) {
+                const ShortAccumulator value_short(value_m);
+                std::get<4>(accumulator) += (value_short - indicator_short * value_short) * scaling_factor;
+            }
+            // (2) (is_read·T − count·L) · I
+            tmp *= inverses;
+            std::get<2>(accumulator) += tmp;
+            return;
+        }
 
         const Accumulator inverses(inverses_m);
         const Accumulator read_counts(read_counts_m);
