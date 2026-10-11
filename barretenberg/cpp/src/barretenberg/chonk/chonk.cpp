@@ -167,7 +167,7 @@ void Chonk::accumulate_hiding_kernel(HidingKernelCircuit& circuit,
     }
 
     vinfo("Constructing hiding kernel instance (proving deferred to prove())");
-    hiding_prover_inst = std::make_shared<HidingKernelProverInstance>(circuit);
+    hiding_prover_inst = std::make_shared<HidingKernelProverInstance>(circuit, CopiedCircuitData::RELEASE);
 
     // The circuit has been copied into the prover polynomials; free its construction data.
     circuit.free_construction_data();
@@ -195,9 +195,12 @@ HonkProof Chonk::instance_to_accumulator(typename InstanceFlavor::CircuitBuilder
     using PI = ProverInstance_<InstanceFlavor>;
     BB_ASSERT(vk != nullptr, "Chonk::accumulate_and_fold - VK expected for the provided circuit");
 
-    auto prover_instance = std::make_shared<PI>(circuit);
 #ifndef NDEBUG
+    // The debug checks below read the circuit after the instance is built.
+    auto prover_instance = std::make_shared<PI>(circuit, CopiedCircuitData::KEEP);
     debug_incoming_circuit<InstanceFlavor>(circuit, prover_instance, vk);
+#else
+    auto prover_instance = std::make_shared<PI>(circuit, CopiedCircuitData::RELEASE);
 #endif
     // The circuit has been copied into the prover polynomials; free its construction data.
     circuit.free_construction_data();
