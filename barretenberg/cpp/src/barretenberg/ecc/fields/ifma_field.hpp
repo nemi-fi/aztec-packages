@@ -16,6 +16,8 @@
 
 #ifdef BB_FIELD_IFMA
 
+#include "barretenberg/ecc/fields/cpu_avx512_ifma.hpp"
+
 #include <immintrin.h>
 
 #include <algorithm>
@@ -46,9 +48,7 @@ inline bool available() noexcept
         if (std::getenv("BB_FIELD_NO_IFMA") != nullptr) {
             return false;
         }
-        __builtin_cpu_init();
-        return __builtin_cpu_supports("avx512f") != 0 && __builtin_cpu_supports("avx512ifma") != 0 &&
-               __builtin_cpu_supports("avx512vl") != 0 && __builtin_cpu_supports("avx512dq") != 0;
+        return bb::detail::cpu_supports_avx512_ifma();
     }();
     return is_available;
 }
