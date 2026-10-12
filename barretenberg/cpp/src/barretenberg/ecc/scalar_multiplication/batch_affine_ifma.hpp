@@ -24,7 +24,13 @@
 #include <memory>
 
 // NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays, cppcoreguidelines-pro-bounds-constant-array-index)
+// LLVM 18+ and GCC 14+ split 512-bit vector support into evex512; without it the 512-bit intrinsics
+// cannot be inlined into these functions.
+#if (defined(__clang__) && __clang_major__ >= 18) || (!defined(__clang__) && defined(__GNUC__) && __GNUC__ >= 14)
+#define BB_IFMA_TARGET __attribute__((target("avx512f,avx512ifma,avx512vl,avx512dq,avx512bw,evex512")))
+#else
 #define BB_IFMA_TARGET __attribute__((target("avx512f,avx512ifma,avx512vl,avx512dq,avx512bw")))
+#endif
 #define BB_IFMA_INLINE BB_IFMA_TARGET __attribute__((always_inline)) inline
 
 namespace bb::scalar_multiplication::ifma {
