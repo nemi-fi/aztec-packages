@@ -1,0 +1,193 @@
+# Builds the community @nemi-fi/bb.js package (community/build-release.sh) in upstream's release build image, checks
+# it against the stock verifier, and on every push to community/v6 publishes it to npm with trusted publishing.
+# Pull requests into community/v6 run the same build and checks without publishing.
+name: community-release
+
+on:
+  pull_request:
+    branches: [community/v6]
+  push:
+    branches: [community/v6]
+
+concurrency:
+  group: community-release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Upstream's release build image (build-images/, version 3.0): zig 0.15.1, wasi-sdk 27, LLVM 20, Rust 1.89, node.
+  BUILD_IMAGE: aztecprotocol/build:3.0
+  PACKAGE: "@nemi-fi/bb.js"
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      upstream: ${{ steps.v.outputs.upstream }}
+      n: ${{ steps.v.outputs.n }}
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: community
+      - id: v
+        name: Next optimise number for the upstream version
+        run: |
+          set -euo pipefail
+          upstream=$(cat community/UPSTREAM_VERSION)
+          npm view "@aztec-foundation/bb.js@$upstream" version >/dev/null
+          published=$(npm view "$PACKAGE" versions --json 2>/dev/null || echo '[]')
+          n=$(node -e '
+            const [published, upstream] = process.argv.slice(1);
+            const versions = [].concat(JSON.parse(published));
+            const prefix = upstream + "-optimise.";
+            const ns = versions.filter(v => v.startsWith(prefix)).map(v => Number(v.slice(prefix.length)));
+            console.log(Math.max(-1, ...ns.filter(Number.isInteger)) + 1);' "$published" "$upstream")
+          echo "upstream=$upstream" >> "$GITHUB_OUTPUT"
+          echo "n=$n" >> "$GITHUB_OUTPUT"
+          echo "version=$upstream-optimise.$n" >> "$GITHUB_OUTPUT"
+          echo "### $PACKAGE@$upstream-optimise.$n" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: build ${{ matrix.kind }} ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { kind: native, target: amd64-linux }
+          - { kind: native, target: arm64-linux }
+          - { kind: native, target: amd64-macos }
+          - { kind: native, target: arm64-macos }
+          - { kind: wasm, target: wasm-threads }
+          - { kind: wasm, target: wasm }
+    steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+      - uses: actions/checkout@v4
+      - name: Noir sources (avm-transpiler depends on them)
+        if: matrix.kind == 'native'
+        run: git submodule update --init --depth 1 noir/noir-repo
+      - name: Pull the build image
+        run: docker pull "$BUILD_IMAGE"
+      - name: Build
+        run: >-
+          docker run --rm -v "$GITHUB_WORKSPACE:/w" -w /w -e OUT=/w/community/out -e JOBS="$(nproc)" "$BUILD_IMAGE"
+          community/scripts/ci_build.sh ${{ matrix.kind }} ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.kind }}-${{ matrix.target }}
+          path: community/out/${{ matrix.kind }}/${{ matrix.target }}
+          if-no-files-found: error
+          retention-days: 7
+
+  pack:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: community/out/native
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wasm-*
+          path: community/out/wasm
+      - name: Lay out the build artifacts
+        run: |
+          set -euo pipefail
+          cd community/out
+          for d in native/native-* wasm/wasm-*; do mv "$d" "$(dirname "$d")/${d#*/*-}"; done
+          ls -R native wasm
+      - name: Pull the build image
+        run: docker pull "$BUILD_IMAGE"
+      - name: Pack
+        run: |
+          docker run --rm -v "$GITHUB_WORKSPACE:/w" -w /w -e OUT=/w/community/out "$BUILD_IMAGE" \
+            community/scripts/ci_build.sh pack ${{ needs.version.outputs.n }}
+          sudo chown -R "$(id -u):$(id -g)" community/out
+
+      # Checks run on the runner itself, against the stock bb and bb.js of the same upstream version.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pinned Chonk flows
+        run: |
+          set -euo pipefail
+          hash=$(cat barretenberg/cpp/scripts/chonk-inputs.hash)
+          mkdir -p "$RUNNER_TEMP/flows"
+          curl -fsSL "https://aztec-ci-artifacts.s3.us-east-2.amazonaws.com/protocol/bb-chonk-inputs-$hash.tar.gz" |
+            tar -xz -C "$RUNNER_TEMP/flows"
+          ls "$RUNNER_TEMP/flows"
+          python3 -m venv "$RUNNER_TEMP/venv" && "$RUNNER_TEMP/venv/bin/pip" install -q msgpack
+      - name: Stock bb verifies real-randomness proofs and rejects tampered ones
+        run: |
+          set -euo pipefail
+          FLOWS=$RUNNER_TEMP/flows PYTHON=$RUNNER_TEMP/venv/bin/python3 community/scripts/verify_with_stock.sh \
+            community/out/native/amd64-linux/bb community/out/stock/package/build/amd64-linux/bb | tee verify.txt
+          ! grep -v ' PASS$' verify.txt
+      - name: Package smoke test (native and WASM backends, verified by stock bb.js)
+        run: |
+          set -euo pipefail
+          smoke=$RUNNER_TEMP/smoke
+          mkdir -p "$smoke" && cp community/scripts/stock_bbjs_verify.mjs "$smoke/"
+          cd "$smoke"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund "@aztec-foundation/bb.js@${{ needs.version.outputs.upstream }}" \
+            "$GITHUB_WORKSPACE"/community/out/nemi-fi-bb.js-*.tgz msgpackr pako
+          flow='ecdsar1+transfer_0_recursions+sponsored_fpc'
+          FLOWS_DIR=$RUNNER_TEMP/flows PROVER_PKG=$PACKAGE node stock_bbjs_verify.mjs "$flow"
+          FLOWS_DIR=$RUNNER_TEMP/flows PROVER_PKG=$PACKAGE PROVER_BACKEND=Wasm node stock_bbjs_verify.mjs "$flow"
+      - name: Summary
+        run: |
+          {
+            echo '```'
+            cat community/out/*.sha256
+            cat verify.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: |
+            community/out/nemi-fi-bb.js-*.tgz
+            community/out/nemi-fi-bb.js-*.tgz.sha256
+            community/out/native_sha256.txt
+          if-no-files-found: error
+
+  # As upstream's publish-npm job: npm trusted publishing, the runner's OIDC token is the only credential.
+  # Configure it on npmjs.com for @nemi-fi/bb.js: repository nemi-fi/aztec-packages, workflow community-release.yml,
+  # environment npm-publish.
+  publish-npm:
+    needs: [version, pack]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/community/v6'
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm >= 11.5.1; Node 22 ships an older npm.
+      - name: Update npm
+        run: npm install -g npm@^11.5.1 && npm --version
+      - name: Publish
+        run: |
+          set -euo pipefail
+          version=${{ needs.version.outputs.version }}
+          tgz=$(realpath "nemi-fi-bb.js-$version.tgz")
+          sha256sum -c "nemi-fi-bb.js-$version.tgz.sha256"
+          [[ "$(tar -xOzf "$tgz" package/package.json | jq -r '.name + "@" + .version')" == "$PACKAGE@$version" ]]
+          npm publish "$tgz" --access public --tag latest --ignore-scripts
+          echo "Published $PACKAGE@$version" >> "$GITHUB_STEP_SUMMARY"
