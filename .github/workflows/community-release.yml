@@ -74,20 +74,9 @@ jobs:
       - name: Pull the build image
         run: docker pull "$BUILD_IMAGE"
       - name: Build
-        run: |
-          docker run --rm -v "$GITHUB_WORKSPACE:/w" -w /w -e OUT=/w/community/out -e JOBS="$(nproc)" "$BUILD_IMAGE" bash -euo pipefail -c '
-            git config --global --add safe.directory "*"
-            # As upstream: ldid signs the Mach-O binaries; avm-transpiler/bootstrap.sh installs cargo-zigbuild.
-            if [[ "${{ matrix.target }}" == *-macos ]]; then
-              curl -fsSL https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_linux_x86_64 -o /usr/local/bin/ldid
-              chmod +x /usr/local/bin/ldid
-            fi
-            if [[ "${{ matrix.kind }}" == native && "${{ matrix.target }}" != amd64-linux ]]; then
-              # From avm-transpiler/ so rustup uses its pinned toolchain; the image's default rustc is older.
-              (cd avm-transpiler && cargo install --locked cargo-zigbuild@0.24.0)
-            fi
-            community/build-release.sh ${{ matrix.kind }} ${{ matrix.target }}
-          '
+        run: >-
+          docker run --rm -v "$GITHUB_WORKSPACE:/w" -w /w -e OUT=/w/community/out -e JOBS="$(nproc)" "$BUILD_IMAGE"
+          community/scripts/ci_build.sh ${{ matrix.kind }} ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.kind }}-${{ matrix.target }}
@@ -119,10 +108,8 @@ jobs:
         run: docker pull "$BUILD_IMAGE"
       - name: Pack
         run: |
-          docker run --rm -v "$GITHUB_WORKSPACE:/w" -w /w -e OUT=/w/community/out "$BUILD_IMAGE" bash -euo pipefail -c '
-            git config --global --add safe.directory "*"
-            community/build-release.sh pack ${{ needs.version.outputs.n }}
-          '
+          docker run --rm -v "$GITHUB_WORKSPACE:/w" -w /w -e OUT=/w/community/out "$BUILD_IMAGE" \
+            community/scripts/ci_build.sh pack ${{ needs.version.outputs.n }}
           sudo chown -R "$(id -u):$(id -g)" community/out
 
       # Checks run on the runner itself, against the stock bb and bb.js of the same upstream version.
