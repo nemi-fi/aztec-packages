@@ -114,6 +114,12 @@ on this branch and are only applied for validation (below).
 
 Dropped: none.
 
+### Fix needed by the series (1)
+
+| Commit | Why |
+|---|---|
+| fix(bb.js): raise the wasm initial memory to the module's declared minimum | The series adds about 18 KB of static data, so the multithreaded wasm declares 38 initial memory pages instead of 37. bb.js creates that memory itself, with a hard-coded 37 pages, and instantiation failed with `LinkError: memory import has 37 pages which is smaller than the declared initial of 38`. bb.js now uses at least `MIN_INITIAL_MEMORY_PAGES` (38), including when a caller passes a smaller `memory.initial`, so the API stays the same. `build-release.sh` fails if a wasm build ever declares more pages than that constant. |
+
 ## Rebasing onto a new upstream v6 release
 
 1. Pick the newest `v6.*` release tag that has a matching `@aztec-foundation/bb.js` on npm (`npm view
@@ -160,7 +166,9 @@ Toolchain (as upstream `build-images`):
 - node 22+ with corepack (yarn 4), npm, python3;
 - `clang-format-20`, for the `aztec_constants.hpp` codegen. `pip install clang-format==20.1.8` works.
 
-It needs a full checkout of this branch, including the `noir/noir-repo` submodule (the script initialises it).
+It needs a full checkout of this branch, including the `noir/noir-repo` submodule (the script initialises it). A
+sparse checkout without `ci3/` breaks the bb.js step: `barretenberg/ts/bootstrap.sh` sources
+`ci3/source_bootstrap`, and without it the bootstrap scripts call each other without end.
 
 ## Validating
 
@@ -185,3 +193,31 @@ python3 with `msgpack`.
    with the package's native (default) or WASM backend and verifies with stock bb.js.
 4. **Speed:** `FLOWS=<flows> ab.sh <stock bb> <release bb> 5 <flow-regex>` runs stock and release interleaved and
    reports wall time and peak RSS.
+
+## Results for 6.0.0-optimise.1
+
+Tarball: `nemi-fi-bb.js-6.0.0-optimise.1.tgz`, built by `community/build-release.sh 1` from this branch,
+sha256 `941cb7779a59fd736230c44e009678803e4e092c3382946983494f22ad563bfd`.
+
+Checked on amd64-linux (4 cores, AVX-512 IFMA), against the 11 pinned v6.0.0 Chonk flows (`chonk-inputs.hash`
+`afe8389cb7f21295`):
+
+1. **Byte-identical:** 11/11 proofs and VKs identical to the upstream reference, and 11/11 again with IFMA forced off
+   (`BB_FIELD_NO_IFMA=1 BB_MSM_NO_IFMA=1`).
+2. **Stock verifier:** for 11/11 flows, stock `bb verify` 6.0.0 accepts the release `bb`'s real-randomness proof
+   and rejects the tampered copy.
+3. **Package smoke test** on `ecdsar1+transfer_0_recursions+sponsored_fpc`: the native default and WASM backends
+   both prove, stock `@aztec-foundation/bb.js@6.0.0` verifies and rejects the tampered proof, and the VK matches
+   the reference.
+4. **Speed**, stock `bb` 6.0.0 against the release `bb`, 5 interleaved reps, min/median wall time:
+
+   | Flow | Stock | Release | Release/stock | Peak RSS release/stock |
+   |---|---|---|---|---|
+   | `ecdsar1+transfer_0_recursions+sponsored_fpc` | 6.48 / 6.86 s | 4.31 / 4.77 s | 0.665 | 0.923 (230 vs 249 MiB) |
+   | same, release with IFMA forced off | 6.77 s | 4.83 s | 0.714 | 0.924 |
+
+   On this CPU the IFMA kernels account for about 11% of the release time. Stock bb has no IFMA switch, so its two
+   timings differ only by noise.
+
+Not used: the aztec-standards app flows captured for v6.0.0-rc.1. They do not match v6.0.0: stock bb 6.0.0 reports a
+VK mismatch on `private_kernel_init_3`.

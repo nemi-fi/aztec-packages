@@ -103,6 +103,15 @@ for preset in wasm-threads wasm; do
   cmake --preset "$preset"
   cmake --build "build-$preset" --target barretenberg.wasm.gz -j "$JOBS"
 done
+# bb.js creates the imported memory itself; it must be at least the size the module declares.
+JS_MIN_PAGES=$(sed -n 's/.*static MIN_INITIAL_MEMORY_PAGES = \([0-9]*\);.*/\1/p' \
+  "$TS/bb.js/src/barretenberg_wasm/barretenberg_wasm_main/index.ts")
+[[ -n "$JS_MIN_PAGES" ]]
+for preset in wasm-threads wasm; do
+  wasm_min=$(node "$ROOT/community/scripts/wasm_memory_min.cjs" "build-$preset/bin/barretenberg.wasm")
+  (( wasm_min <= JS_MIN_PAGES )) || {
+    echo "$preset wasm declares $wasm_min initial pages > bb.js MIN_INITIAL_MEMORY_PAGES=$JS_MIN_PAGES" >&2; exit 1; }
+done
 
 # --- TS package ---
 log "bb.js"
