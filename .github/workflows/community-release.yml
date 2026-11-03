@@ -83,7 +83,8 @@ jobs:
               chmod +x /usr/local/bin/ldid
             fi
             if [[ "${{ matrix.kind }}" == native && "${{ matrix.target }}" != amd64-linux ]]; then
-              cargo install --locked cargo-zigbuild
+              # From avm-transpiler/ so rustup uses its pinned toolchain; the image's default rustc is older.
+              (cd avm-transpiler && cargo install --locked cargo-zigbuild@0.24.0)
             fi
             community/build-release.sh ${{ matrix.kind }} ${{ matrix.target }}
           '
