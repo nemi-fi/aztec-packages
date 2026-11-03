@@ -14,6 +14,11 @@ import { HeapAllocator } from './heap_allocator.js';
  */
 export class BarretenbergWasmMain extends BarretenbergWasmBase {
   static MAX_THREADS = 32;
+  /**
+   * Initial memory pages the barretenberg wasm declares for its imported memory (stack plus static data). A smaller
+   * requested initial size is raised to this, since instantiation rejects a memory below the declared minimum.
+   */
+  static MIN_INITIAL_MEMORY_PAGES = 38;
   private workers: Worker[] = [];
   private remoteWasms: BarretenbergWasmThreadWorker[] = [];
   private nextWorker = 0;
@@ -36,13 +41,14 @@ export class BarretenbergWasmMain extends BarretenbergWasmBase {
     module: WebAssembly.Module,
     threads = Math.min(getNumCpu(), BarretenbergWasmMain.MAX_THREADS),
     logger?: (msg: string) => void,
-    initial = 37,
+    initial = BarretenbergWasmMain.MIN_INITIAL_MEMORY_PAGES,
     maximum = this.getDefaultMaximumMemoryPages(),
     unref = false,
   ) {
     // Track whether a custom logger was provided so workers know whether to postMessage logs
     this.useCustomLogger = logger !== undefined;
     this.logger = logger ?? (() => {});
+    initial = Math.max(initial, BarretenbergWasmMain.MIN_INITIAL_MEMORY_PAGES);
 
     const initialMb = (initial * 2 ** 16) / (1024 * 1024);
     const maxMb = (maximum * 2 ** 16) / (1024 * 1024);
