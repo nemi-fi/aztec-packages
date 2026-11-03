@@ -33,13 +33,23 @@ if [[ "$current" != "$BRANCH" ]]; then
   git checkout -b "$BRANCH" origin/community/v6
 fi
 
+# Upstream's workflows need AztecProtocol's infrastructure; this branch keeps only community-release.yml.
+drop_upstream_workflows() {
+  git ls-files --sparse .github/workflows | grep -vx .github/workflows/community-release.yml |
+    xargs -r git rm -q -f --sparse --
+}
+
 if ! git merge-base --is-ancestor "$TAG" HEAD; then
-  git merge --no-ff --no-edit -m "chore(community): merge upstream $TAG" "$TAG" || {
-    echo >&2
+  git merge --no-ff --no-commit "$TAG" || true
+  git rev-parse -q --verify MERGE_HEAD >/dev/null || die "merging $TAG failed before any conflict resolution"
+  drop_upstream_workflows
+  conflicts=$(git diff --name-only --diff-filter=U)
+  if [[ -n "$conflicts" ]]; then
     echo "Conflicts merging $TAG. Resolve them, 'git commit', then run: community/update-upstream.sh $TAG" >&2
-    git diff --name-only --diff-filter=U >&2
+    echo "$conflicts" >&2
     exit 1
-  }
+  fi
+  git commit -q --no-edit -m "chore(community): merge upstream $TAG"
 fi
 
 echo "$VERSION" > community/UPSTREAM_VERSION

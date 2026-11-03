@@ -160,8 +160,9 @@ and npm adds provenance on its own. One-time setup on npmjs.com:
    `community-release.yml`, environment `npm-publish`.
 
 On GitHub, Actions must be enabled for the fork. The `npm-publish` environment can require a reviewer before
-publishing. The upstream workflows on this branch (`ci3.yml` and the others) need AztecProtocol's AWS account and
-fail in the fork: disable them in the Actions tab.
+publishing. Upstream's workflows need AztecProtocol's infrastructure, so this branch keeps only
+`community-release.yml`. `update-upstream.sh` deletes the others again in each merge, including new ones, before
+reporting conflicts.
 
 ## Building a release
 
