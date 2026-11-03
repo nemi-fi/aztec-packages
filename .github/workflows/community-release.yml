@@ -1,6 +1,6 @@
 # Builds the community @nemi-fi/bb.js package (community/build-release.sh) in upstream's release build image, checks
 # it against the stock verifier, and on every push to community/v6 publishes it to npm with trusted publishing.
-# Pull requests into community/v6 run the same build and checks without publishing.
+# Pull requests into community/v6 only check that the code builds, on the fastest target, to save Actions minutes.
 name: community-release
 
 on:
@@ -23,6 +23,7 @@ env:
 
 jobs:
   version:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       upstream: ${{ steps.v.outputs.upstream }}
@@ -57,13 +58,15 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        include:
-          - { kind: native, target: amd64-linux }
-          - { kind: native, target: arm64-linux }
-          - { kind: native, target: amd64-macos }
-          - { kind: native, target: arm64-macos }
-          - { kind: wasm, target: wasm-threads }
-          - { kind: wasm, target: wasm }
+        include: >-
+          ${{ fromJSON(github.event_name == 'push' && '[
+          {"kind": "native", "target": "amd64-linux"},
+          {"kind": "native", "target": "arm64-linux"},
+          {"kind": "native", "target": "amd64-macos"},
+          {"kind": "native", "target": "arm64-macos"},
+          {"kind": "wasm", "target": "wasm-threads"},
+          {"kind": "wasm", "target": "wasm"}
+          ]' || '[{"kind": "native", "target": "amd64-linux"}]') }}
     steps:
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
@@ -78,6 +81,7 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE:/w" -w /w -e OUT=/w/community/out -e JOBS="$(nproc)" "$BUILD_IMAGE"
           community/scripts/ci_build.sh ${{ matrix.kind }} ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
         with:
           name: ${{ matrix.kind }}-${{ matrix.target }}
           path: community/out/${{ matrix.kind }}/${{ matrix.target }}
@@ -86,6 +90,7 @@ jobs:
 
   pack:
     needs: [version, build]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -162,7 +167,8 @@ jobs:
 
   # As upstream's publish-npm job: npm trusted publishing, the runner's OIDC token is the only credential.
   # Configure it on npmjs.com for @nemi-fi/bb.js: repository nemi-fi/aztec-packages, workflow community-release.yml,
-  # environment npm-publish.
+  # environment npm-publish, permission "npm stage publish". The release is staged; a maintainer approves it with 2FA
+  # (`npm stage approve <stage-id>` or on npmjs.com) before it becomes public.
   publish-npm:
     needs: [version, pack]
     if: github.event_name == 'push' && github.ref == 'refs/heads/community/v6'
@@ -179,9 +185,9 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      # Trusted publishing needs npm >= 11.5.1; Node 22 ships an older npm.
+      # Staged publishing needs a newer npm than Node 22 ships.
       - name: Update npm
-        run: npm install -g npm@^11.5.1 && npm --version
+        run: npm install -g npm@11.21.1 && npm --version
       - name: Publish
         run: |
           set -euo pipefail
@@ -189,5 +195,5 @@ jobs:
           tgz=$(realpath "nemi-fi-bb.js-$version.tgz")
           sha256sum -c "nemi-fi-bb.js-$version.tgz.sha256"
           [[ "$(tar -xOzf "$tgz" package/package.json | jq -r '.name + "@" + .version')" == "$PACKAGE@$version" ]]
-          npm publish "$tgz" --access public --tag latest --ignore-scripts
-          echo "Published $PACKAGE@$version" >> "$GITHUB_STEP_SUMMARY"
+          npm stage publish "$tgz" --access public --tag latest
+          echo "Staged $PACKAGE@$version: approve it with \`npm stage approve <stage-id>\` (\`npm stage list $PACKAGE\`) or on npmjs.com" >> "$GITHUB_STEP_SUMMARY"

@@ -14,7 +14,7 @@
 #   - pack: the TS package, laid over the stock @aztec-foundation/bb.js tarball of the same version: the stock
 #     package.json is kept (only name and version change), and every stock file must be present.
 #
-# env:   OUT (default community/out), JOBS (default nproc), UPSTREAM_VERSION (default community/UPSTREAM_VERSION)
+# env:   OUT (default community/out), REPOSITORY (default nemi-fi/aztec-packages), JOBS (default nproc), UPSTREAM_VERSION (default community/UPSTREAM_VERSION)
 # needs: zig 0.15.1, rustup + cargo-zigbuild, cmake, ninja, /opt/wasi-sdk (wasi-sdk 27), llvm-strip(-20),
 #        ldid or rcodesign, node 22+ with corepack (yarn 4), npm, python3, clang-format-20 (constants codegen).
 #        The upstream build image aztecprotocol/build:3.0 has all of them except ldid and cargo-zigbuild.
@@ -25,6 +25,7 @@ ARG=${2:?usage: build-release.sh native <platform> | wasm <preset> | pack <n> | 
 ROOT=$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)
 UPSTREAM_VERSION=${UPSTREAM_VERSION:-$(cat "$ROOT/community/UPSTREAM_VERSION")}
 NAME=@nemi-fi/bb.js
+REPOSITORY=${REPOSITORY:-nemi-fi/aztec-packages}
 OUT=${OUT:-$ROOT/community/out}
 OUT=$(mkdir -p "$OUT" && cd "$OUT" && pwd)
 JOBS=${JOBS:-$(nproc)}
@@ -186,14 +187,16 @@ pack() {
   done
   shopt -u globstar nullglob
 
-  # Pack with the stock package.json (identical exports, files, dependencies, repository), renamed and re-versioned.
+  # Pack with the stock package.json (identical exports, files, dependencies), renamed and re-versioned. The repository
+  # points at this fork: npm trusted publishing requires it to match the repository the package is published from.
   cp package.json "$OUT/package.json.source"
   node -e '
 const fs = require("fs");
 const p = JSON.parse(fs.readFileSync(process.argv[1]));
 p.name = process.argv[2];
 p.version = process.argv[3];
-fs.writeFileSync("package.json", JSON.stringify(p, null, 2) + "\n");' "$stock/package/package.json" "$NAME" "$version"
+p.repository.url = "git+https://github.com/" + process.argv[4] + ".git";
+fs.writeFileSync("package.json", JSON.stringify(p, null, 2) + "\n");' "$stock/package/package.json" "$NAME" "$version" "$REPOSITORY"
   tgz=$OUT/nemi-fi-bb.js-$version.tgz
   rm -f "$tgz"
   npm pack --pack-destination "$OUT" >/dev/null

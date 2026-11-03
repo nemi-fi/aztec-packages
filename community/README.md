@@ -4,8 +4,8 @@
 barretenberg. It is published to npm as `@nemi-fi/bb.js`, a drop-in replacement for `@aztec-foundation/bb.js` of
 the same upstream version:
 
-- **Same API.** The package is built from the same sources, with the stock `package.json` (only `name` and
-  `version` differ).
+- **Same API.** The package is built from the same sources, with the stock `package.json` (only `name`,
+  `version` and the repository URL differ).
 - **Same proofs.** Only prover code changes. Proofs and VKs are byte-identical to the upstream prover's under
   deterministic randomness, and the stock verifier accepts them. Verifier code is not touched.
 - **Faster.** Native `bb` / `nodejs_module.node` for {amd64,arm64}-{linux,macos} and both WASM builds. On x86 CPUs
@@ -33,25 +33,25 @@ interleaved runs, min wall time:
 
 ## Releasing
 
-Every merge into `community/v6` publishes a release. To move to a new upstream v6 release:
+Every merge into `community/v6` stages a release on npm for approval. To move to a new upstream v6 release:
 
 1. `community/update-upstream.sh v6.X.Y` creates `community/update-v6.X.Y` and merges the upstream tag into it.
    It removes upstream's GitHub workflows during the merge and records the version in `community/UPSTREAM_VERSION`.
 2. If it stops on conflicts, keep upstream's version and re-apply only the part of the optimisation that is still
    missing. If upstream already has the change, take upstream's side. Then `git commit` and run the script again.
 3. Check byte-identical proofs (see [Validating](#validating)).
-4. Push the branch and open a PR into `community/v6`. CI builds the package and checks it.
+4. Push the branch and open a PR into `community/v6`. CI checks that native amd64-linux builds (about 20 minutes).
 5. Merge with a **merge commit**, not a squash, so the next upstream merge starts from this one.
 
-`.github/workflows/community-release.yml` runs on every PR into `community/v6` and every push to it, in about
-50 minutes:
+On a PR, `.github/workflows/community-release.yml` builds only native amd64-linux, to save Actions minutes. On every
+push to `community/v6` it runs the full release, in about 50 minutes:
 
 | Job | |
 |---|---|
 | `version` | `<n>` = 1 + the highest published `optimise.<n>` for the upstream version, or 0 |
 | `build` | 4 native platforms and 2 WASM builds in parallel, in upstream's release image `aztecprotocol/build:3.0` |
 | `pack` | Packs the tarball, then runs the stock-verifier check and the package smoke test |
-| `publish-npm` | Pushes only: `npm publish --tag latest` with npm trusted publishing (environment `npm-publish`) |
+| `publish-npm` | Pushes only: `npm stage publish --tag latest` with npm trusted publishing (environment `npm-publish`). The release goes public once a maintainer approves it with 2FA: `npm stage list @nemi-fi/bb.js`, then `npm stage approve <stage-id>`, or on npmjs.com |
 
 ## Building locally
 
