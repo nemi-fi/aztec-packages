@@ -44,7 +44,7 @@ jobs:
             const versions = [].concat(JSON.parse(published));
             const prefix = upstream + "-optimise.";
             const ns = versions.filter(v => v.startsWith(prefix)).map(v => Number(v.slice(prefix.length)));
-            console.log(Math.max(0, ...ns.filter(Number.isInteger)) + 1);' "$published" "$upstream")
+            console.log(Math.max(-1, ...ns.filter(Number.isInteger)) + 1);' "$published" "$upstream")
           echo "upstream=$upstream" >> "$GITHUB_OUTPUT"
           echo "n=$n" >> "$GITHUB_OUTPUT"
           echo "version=$upstream-optimise.$n" >> "$GITHUB_OUTPUT"

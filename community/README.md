@@ -15,7 +15,7 @@ multi-threaded. On x86 CPUs with AVX-512 IFMA, extra IFMA kernels are selected a
 
 ## npm naming
 
-`@nemi-fi/bb.js@<upstream-version>-optimise.<n>`, for example `@nemi-fi/bb.js@6.0.0-optimise.1`. `<n>` starts at 1
+`@nemi-fi/bb.js@<upstream-version>-optimise.<n>`, for example `@nemi-fi/bb.js@6.0.0-optimise.0`. `<n>` starts at 0
 for each upstream version and goes up for each re-release on the same base. The binaries report the upstream version
 (`bb --version` → `6.0.0`), as stock does. The newest release has the `latest` dist-tag.
 
@@ -146,7 +146,7 @@ always the latest upstream v6 release plus the series:
 
 | Job | What it does |
 |---|---|
-| `version` | `<n>` = 1 + the highest published `<upstream-version>-optimise.<n>` |
+| `version` | `<n>` = 1 + the highest published `<upstream-version>-optimise.<n>`, or 0 if there is none |
 | `build` (6 parallel jobs) | `build-release.sh native <platform>` for the 4 platforms and `build-release.sh wasm <preset>` for both WASM builds, in upstream's release image `aztecprotocol/build:3.0` |
 | `pack` | `build-release.sh pack <n>`, then the stock-verifier check and the package smoke test (native and WASM) |
 | `publish-npm` | only on a push to `community/v6`: `npm publish --tag latest` with npm trusted publishing |
@@ -163,7 +163,7 @@ reporting conflicts.
 ## Building a release
 
 ```bash
-community/build-release.sh all 1     # -> community/out/nemi-fi-bb.js-<upstream>-optimise.1.tgz (+ .sha256)
+community/build-release.sh all 0     # -> community/out/nemi-fi-bb.js-<upstream>-optimise.0.tgz (+ .sha256)
 ```
 
 `native <platform>`, `wasm <preset>` and `pack <n>` run one part each; CI runs them as separate jobs. The script is
