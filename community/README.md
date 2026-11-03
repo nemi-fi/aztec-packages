@@ -4,8 +4,8 @@
 barretenberg. It is published to npm as `@nemi-fi/bb.js`, a drop-in replacement for `@aztec-foundation/bb.js` of
 the same upstream version:
 
-- **Same API.** The package is built from the same sources, with the stock `package.json` (only `name` and
-  `version` differ).
+- **Same API.** The package is built from the same sources, with the stock `package.json` (only `name`,
+  `version` and the repository URL differ).
 - **Same proofs.** Only prover code changes. Proofs and VKs are byte-identical to the upstream prover's under
   deterministic randomness, and the stock verifier accepts them. Verifier code is not touched.
 - **Faster.** Native `bb` / `nodejs_module.node` for {amd64,arm64}-{linux,macos} and both WASM builds. On x86 CPUs
