@@ -152,12 +152,8 @@ always the latest upstream v6 release plus the series:
 | `publish-npm` | only on a push to `community/v6`: `npm publish --tag latest` with npm trusted publishing |
 
 Every merged PR is a release. As in upstream's `publish-npm` job, the workflow's OIDC token is the only credential,
-and npm adds provenance on its own. One-time setup on npmjs.com:
-
-1. Publish the first version by hand, since npm only offers trusted publishing for a package that exists:
-   `npm publish nemi-fi-bb.js-6.0.0-optimise.1.tgz --access public --tag latest`.
-2. In the package settings, add a trusted publisher: GitHub Actions, repository `nemi-fi/aztec-packages`, workflow
-   `community-release.yml`, environment `npm-publish`.
+and npm adds provenance on its own. On npmjs.com, `@nemi-fi/bb.js` trusts GitHub Actions with repository
+`nemi-fi/aztec-packages`, workflow `community-release.yml` and environment `npm-publish`.
 
 On GitHub, Actions must be enabled for the fork. The `npm-publish` environment can require a reviewer before
 publishing. Upstream's workflows need AztecProtocol's infrastructure, so this branch keeps only
@@ -228,6 +224,7 @@ python3 with `msgpack`.
 
 Tarball: `nemi-fi-bb.js-6.0.0-optimise.1.tgz`, built by `community/build-release.sh 1` from `780416c6`,
 sha256 `941cb7779a59fd736230c44e009678803e4e092c3382946983494f22ad563bfd`.
+The published package is built by CI from the same commits; its sha256 is in the `community-release` run summary.
 
 Checked on amd64-linux (4 cores, AVX-512 IFMA), against the 11 pinned v6.0.0 Chonk flows (`chonk-inputs.hash`
 `afe8389cb7f21295`):
