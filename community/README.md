@@ -40,11 +40,11 @@ Every merge into `community/v6` publishes a release. To move to a new upstream v
 2. If it stops on conflicts, keep upstream's version and re-apply only the part of the optimisation that is still
    missing. If upstream already has the change, take upstream's side. Then `git commit` and run the script again.
 3. Check byte-identical proofs (see [Validating](#validating)).
-4. Push the branch and open a PR into `community/v6`. CI builds the package and checks it.
+4. Push the branch and open a PR into `community/v6`. CI checks that native amd64-linux builds (about 20 minutes).
 5. Merge with a **merge commit**, not a squash, so the next upstream merge starts from this one.
 
-`.github/workflows/community-release.yml` runs on every PR into `community/v6` and every push to it, in about
-50 minutes:
+On a PR, `.github/workflows/community-release.yml` builds only native amd64-linux, to save Actions minutes. On every
+push to `community/v6` it runs the full release, in about 50 minutes:
 
 | Job | |
 |---|---|

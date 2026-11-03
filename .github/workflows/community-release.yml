@@ -1,6 +1,6 @@
 # Builds the community @nemi-fi/bb.js package (community/build-release.sh) in upstream's release build image, checks
 # it against the stock verifier, and on every push to community/v6 publishes it to npm with trusted publishing.
-# Pull requests into community/v6 run the same build and checks without publishing.
+# Pull requests into community/v6 only check that the code builds, on the fastest target, to save Actions minutes.
 name: community-release
 
 on:
@@ -23,6 +23,7 @@ env:
 
 jobs:
   version:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       upstream: ${{ steps.v.outputs.upstream }}
@@ -57,13 +58,15 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        include:
-          - { kind: native, target: amd64-linux }
-          - { kind: native, target: arm64-linux }
-          - { kind: native, target: amd64-macos }
-          - { kind: native, target: arm64-macos }
-          - { kind: wasm, target: wasm-threads }
-          - { kind: wasm, target: wasm }
+        include: >-
+          ${{ fromJSON(github.event_name == 'push' && '[
+          {"kind": "native", "target": "amd64-linux"},
+          {"kind": "native", "target": "arm64-linux"},
+          {"kind": "native", "target": "amd64-macos"},
+          {"kind": "native", "target": "arm64-macos"},
+          {"kind": "wasm", "target": "wasm-threads"},
+          {"kind": "wasm", "target": "wasm"}
+          ]' || '[{"kind": "native", "target": "amd64-linux"}]') }}
     steps:
       - name: Free disk space
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
@@ -78,6 +81,7 @@ jobs:
           docker run --rm -v "$GITHUB_WORKSPACE:/w" -w /w -e OUT=/w/community/out -e JOBS="$(nproc)" "$BUILD_IMAGE"
           community/scripts/ci_build.sh ${{ matrix.kind }} ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
         with:
           name: ${{ matrix.kind }}-${{ matrix.target }}
           path: community/out/${{ matrix.kind }}/${{ matrix.target }}
@@ -86,6 +90,7 @@ jobs:
 
   pack:
     needs: [version, build]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
