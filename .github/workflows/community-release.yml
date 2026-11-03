@@ -167,7 +167,8 @@ jobs:
 
   # As upstream's publish-npm job: npm trusted publishing, the runner's OIDC token is the only credential.
   # Configure it on npmjs.com for @nemi-fi/bb.js: repository nemi-fi/aztec-packages, workflow community-release.yml,
-  # environment npm-publish.
+  # environment npm-publish, permission "npm stage publish". The release is staged; a maintainer approves it with 2FA
+  # (`npm stage approve <stage-id>` or on npmjs.com) before it becomes public.
   publish-npm:
     needs: [version, pack]
     if: github.event_name == 'push' && github.ref == 'refs/heads/community/v6'
@@ -184,9 +185,9 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      # Trusted publishing needs npm >= 11.5.1; Node 22 ships an older npm.
+      # Staged publishing needs a newer npm than Node 22 ships.
       - name: Update npm
-        run: npm install -g npm@^11.5.1 && npm --version
+        run: npm install -g npm@11.21.1 && npm --version
       - name: Publish
         run: |
           set -euo pipefail
@@ -194,5 +195,5 @@ jobs:
           tgz=$(realpath "nemi-fi-bb.js-$version.tgz")
           sha256sum -c "nemi-fi-bb.js-$version.tgz.sha256"
           [[ "$(tar -xOzf "$tgz" package/package.json | jq -r '.name + "@" + .version')" == "$PACKAGE@$version" ]]
-          npm publish "$tgz" --access public --tag latest --ignore-scripts
-          echo "Published $PACKAGE@$version" >> "$GITHUB_STEP_SUMMARY"
+          npm stage publish "$tgz" --access public --tag latest
+          echo "Staged $PACKAGE@$version: approve it with \`npm stage approve <stage-id>\` (\`npm stage list $PACKAGE\`) or on npmjs.com" >> "$GITHUB_STEP_SUMMARY"

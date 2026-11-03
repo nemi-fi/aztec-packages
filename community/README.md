@@ -33,7 +33,7 @@ interleaved runs, min wall time:
 
 ## Releasing
 
-Every merge into `community/v6` publishes a release. To move to a new upstream v6 release:
+Every merge into `community/v6` stages a release on npm for approval. To move to a new upstream v6 release:
 
 1. `community/update-upstream.sh v6.X.Y` creates `community/update-v6.X.Y` and merges the upstream tag into it.
    It removes upstream's GitHub workflows during the merge and records the version in `community/UPSTREAM_VERSION`.
@@ -51,7 +51,7 @@ push to `community/v6` it runs the full release, in about 50 minutes:
 | `version` | `<n>` = 1 + the highest published `optimise.<n>` for the upstream version, or 0 |
 | `build` | 4 native platforms and 2 WASM builds in parallel, in upstream's release image `aztecprotocol/build:3.0` |
 | `pack` | Packs the tarball, then runs the stock-verifier check and the package smoke test |
-| `publish-npm` | Pushes only: `npm publish --tag latest` with npm trusted publishing (environment `npm-publish`) |
+| `publish-npm` | Pushes only: `npm stage publish --tag latest` with npm trusted publishing (environment `npm-publish`). The release goes public once a maintainer approves it with 2FA: `npm stage list @nemi-fi/bb.js`, then `npm stage approve <stage-id>`, or on npmjs.com |
 
 ## Building locally
 
