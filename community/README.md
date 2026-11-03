@@ -17,8 +17,7 @@ multi-threaded. On x86 CPUs with AVX-512 IFMA, extra IFMA kernels are selected a
 
 `@nemi-fi/bb.js@<upstream-version>-optimise.<n>`, for example `@nemi-fi/bb.js@6.0.0-optimise.1`. `<n>` starts at 1
 for each upstream version and goes up for each re-release on the same base. The binaries report the upstream version
-(`bb --version` → `6.0.0`), as stock does. Publish with a dist-tag, since npm refuses a prerelease without one:
-`npm publish nemi-fi-bb.js-6.0.0-optimise.1.tgz --access public --tag optimise`.
+(`bb --version` → `6.0.0`), as stock does. The newest release has the `latest` dist-tag.
 
 ## The series
 
@@ -120,28 +119,58 @@ Dropped: none.
 |---|---|
 | fix(bb.js): raise the wasm initial memory to the module's declared minimum | The series adds about 18 KB of static data, so the multithreaded wasm declares 38 initial memory pages instead of 37. bb.js creates that memory itself, with a hard-coded 37 pages, and instantiation failed with `LinkError: memory import has 37 pages which is smaller than the declared initial of 38`. bb.js now uses at least `MIN_INITIAL_MEMORY_PAGES` (38), including when a caller passes a smaller `memory.initial`, so the API stays the same. `build-release.sh` fails if a wasm build ever declares more pages than that constant. |
 
-## Rebasing onto a new upstream v6 release
+## Updating to a new upstream v6 release
 
-1. Pick the newest `v6.*` release tag that has a matching `@aztec-foundation/bb.js` on npm (`npm view
-   @aztec-foundation/bb.js versions`). Fetch it into this fork:
-   `git fetch https://github.com/AztecProtocol/aztec-packages.git tag v6.X.Y`.
-2. Re-apply the series with the tag as the new base:
-   `git rebase --onto v6.X.Y <old-base-tag> community/v6`. Alternatively, export it with
-   `git format-patch <old-base-tag>..community/v6` and `git am -3` the patches onto a fresh branch.
-3. For each conflict:
-   - **Upstream already has the change.** The rebase stops with an empty commit, or `git am` reports
-     "No changes": skip it and move the row to "Already upstream".
-   - **Partial overlap.** Keep upstream's version and re-apply only the part that is still missing. If upstream
+The optimisations are ordinary commits on this branch. Each upstream release is merged in, so `community/v6` is
+always the latest upstream v6 release plus the series:
+
+1. `community/update-upstream.sh v6.X.Y` fetches the upstream tag, creates `community/update-v6.X.Y` from
+   `community/v6`, merges the tag and records it in `community/UPSTREAM_VERSION`. It refuses a tag without a
+   matching `@aztec-foundation/bb.js` on npm.
+2. On conflicts it stops with the merge in progress. For each conflict:
+   - **Upstream already has the change:** take upstream's side and move the row to "Already upstream".
+   - **Partial overlap:** keep upstream's version and re-apply only the part that is still missing. If upstream
      tightened a condition the patch also edits (for example a relation `skip()`), keep upstream's extra checks.
-4. Set `community/UPSTREAM_VERSION`, update the tables above, and validate before releasing.
+
+   Then `git commit` and run the script again with the same tag.
+3. Check that proofs are byte-identical (step 1 of "Validating"; the harness patches are not on this branch), and
+   update the tables above.
+4. Push the branch and open a PR into `community/v6`. Its CI builds the package and runs checks 2 and 3 of
+   "Validating".
+5. Merge the PR **with a merge commit**, not a squash. A squash drops upstream's history, and the next update would
+   conflict on every upstream change again. The push to `community/v6` publishes the release (below).
+
+## Releasing from GitHub
+
+`.github/workflows/community-release.yml` runs on every PR into `community/v6` and on every push to it:
+
+| Job | What it does |
+|---|---|
+| `version` | `<n>` = 1 + the highest published `<upstream-version>-optimise.<n>` |
+| `build` (6 parallel jobs) | `build-release.sh native <platform>` for the 4 platforms and `build-release.sh wasm <preset>` for both WASM builds, in upstream's release image `aztecprotocol/build:3.0` |
+| `pack` | `build-release.sh pack <n>`, then the stock-verifier check and the package smoke test (native and WASM) |
+| `publish-npm` | only on a push to `community/v6`: `npm publish --tag latest` with npm trusted publishing |
+
+Every merged PR is a release. As in upstream's `publish-npm` job, the workflow's OIDC token is the only credential,
+and npm adds provenance on its own. One-time setup on npmjs.com:
+
+1. Publish the first version by hand, since npm only offers trusted publishing for a package that exists:
+   `npm publish nemi-fi-bb.js-6.0.0-optimise.1.tgz --access public --tag latest`.
+2. In the package settings, add a trusted publisher: GitHub Actions, repository `nemi-fi/aztec-packages`, workflow
+   `community-release.yml`, environment `npm-publish`.
+
+On GitHub, Actions must be enabled for the fork. The `npm-publish` environment can require a reviewer before
+publishing. The upstream workflows on this branch (`ci3.yml` and the others) need AztecProtocol's AWS account and
+fail in the fork: disable them in the Actions tab.
 
 ## Building a release
 
 ```bash
-community/build-release.sh 1     # -> community/out/nemi-fi-bb.js-<upstream>-optimise.1.tgz (+ .sha256)
+community/build-release.sh all 1     # -> community/out/nemi-fi-bb.js-<upstream>-optimise.1.tgz (+ .sha256)
 ```
 
-The script is fail-fast and runs the whole documented release process:
+`native <platform>`, `wasm <preset>` and `pack <n>` run one part each; CI runs them as separate jobs. The script is
+fail-fast and runs the whole documented release process:
 
 - avm-transpiler (stock `bb` links it):
   - `cargo build` for linux-amd64;
@@ -158,7 +187,7 @@ The script is fail-fast and runs the whole documented release process:
   - packed with the stock `package.json` (renamed, re-versioned);
   - the build fails if any file of the stock tarball is missing.
 
-Toolchain (as upstream `build-images`):
+Toolchain (as upstream's `build-images`, plus `ldid` and `cargo-zigbuild`, which upstream also installs separately):
 - zig 0.15.1;
 - wasi-sdk 27 at `/opt/wasi-sdk`;
 - rustup + `cargo-zigbuild`;
@@ -196,7 +225,7 @@ python3 with `msgpack`.
 
 ## Results for 6.0.0-optimise.1
 
-Tarball: `nemi-fi-bb.js-6.0.0-optimise.1.tgz`, built by `community/build-release.sh 1` from this branch,
+Tarball: `nemi-fi-bb.js-6.0.0-optimise.1.tgz`, built by `community/build-release.sh 1` from `780416c6`,
 sha256 `941cb7779a59fd736230c44e009678803e4e092c3382946983494f22ad563bfd`.
 
 Checked on amd64-linux (4 cores, AVX-512 IFMA), against the 11 pinned v6.0.0 Chonk flows (`chonk-inputs.hash`
