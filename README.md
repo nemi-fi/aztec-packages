@@ -4,23 +4,31 @@ A community build of [`@aztec-foundation/bb.js`](https://www.npmjs.com/package/@
 Chonk prover. It is a drop-in replacement: the same API and the same proofs, about a third faster.
 
 Aztec packages depend on `@aztec-foundation/bb.js`, so swap it in with your package manager's overrides. Your code
-and its imports stay the same. In `package.json`:
+and its imports stay the same.
 
-```jsonc
-// npm
+npm, in `package.json`:
+
+```json
 "overrides": { "@aztec-foundation/bb.js": "npm:@nemi-fi/bb.js@6.0.0-optimise.0" }
+```
 
-// pnpm
-"pnpm": { "overrides": { "@aztec-foundation/bb.js": "npm:@nemi-fi/bb.js@6.0.0-optimise.0" } }
+yarn, in `package.json`:
 
-// yarn
+```json
 "resolutions": { "@aztec-foundation/bb.js": "npm:@nemi-fi/bb.js@6.0.0-optimise.0" }
+```
+
+pnpm, in `pnpm-workspace.yaml` (pnpm no longer reads the `pnpm` field of `package.json`):
+
+```yaml
+overrides:
+  "@aztec-foundation/bb.js": "npm:@nemi-fi/bb.js@6.0.0-optimise.0"
 ```
 
 Then reinstall. With npm, if your app also depends on `@aztec-foundation/bb.js` directly, alias that dependency
 instead and point the override at it:
 
-```jsonc
+```json
 "dependencies": { "@aztec-foundation/bb.js": "npm:@nemi-fi/bb.js@6.0.0-optimise.0" },
 "overrides": { "@aztec-foundation/bb.js": "$@aztec-foundation/bb.js" }
 ```
