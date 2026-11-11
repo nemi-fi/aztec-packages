@@ -3,13 +3,26 @@
 A community build of [`@aztec-foundation/bb.js`](https://www.npmjs.com/package/@aztec-foundation/bb.js) with a faster
 Chonk prover. It is a drop-in replacement: the same API and the same proofs, about a third faster.
 
-```bash
-npm install @nemi-fi/bb.js
+Aztec packages depend on `@aztec-foundation/bb.js`, so swap it in with your package manager's overrides. Your code
+and its imports stay the same. In `package.json`:
+
+```jsonc
+// npm
+"overrides": { "@aztec-foundation/bb.js": "npm:@nemi-fi/bb.js@6.0.0-optimise.0" }
+
+// pnpm
+"pnpm": { "overrides": { "@aztec-foundation/bb.js": "npm:@nemi-fi/bb.js@6.0.0-optimise.0" } }
+
+// yarn
+"resolutions": { "@aztec-foundation/bb.js": "npm:@nemi-fi/bb.js@6.0.0-optimise.0" }
 ```
 
-```diff
-- import { Barretenberg } from '@aztec-foundation/bb.js';
-+ import { Barretenberg } from '@nemi-fi/bb.js';
+Then reinstall. With npm, if your app also depends on `@aztec-foundation/bb.js` directly, alias that dependency
+instead and point the override at it:
+
+```jsonc
+"dependencies": { "@aztec-foundation/bb.js": "npm:@nemi-fi/bb.js@6.0.0-optimise.0" },
+"overrides": { "@aztec-foundation/bb.js": "$@aztec-foundation/bb.js" }
 ```
 
 ## What you get
