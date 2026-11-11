@@ -42,7 +42,7 @@ instead and point the override at it:
   deterministic randomness, and the stock verifier accepts them. Verifier code is not touched.
 - **Every platform.** Native `bb` and Node addon for linux and macOS on amd64 and arm64, plus both WASM builds.
 
-Versions follow upstream: `@nemi-fi/bb.js@6.0.0-optimise.<n>` is built on aztec-packages `v6.0.0`. Use the
+Versions follow upstream: `@nemi-fi/bb.js@<version>-optimise.<n>` is built on aztec-packages `v<version>`. Use the
 version that matches the `@aztec-foundation/bb.js` version your Aztec stack expects.
 
 ## How it is built
