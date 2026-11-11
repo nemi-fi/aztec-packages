@@ -52,6 +52,7 @@ push to `community/v6` it runs the full release, in about 50 minutes:
 | `build` | 4 native platforms and 2 WASM builds in parallel, in upstream's release image `aztecprotocol/build:3.0` |
 | `pack` | Packs the tarball, then runs the stock-verifier check and the package smoke test |
 | `publish-npm` | Pushes only: `npm stage publish --tag latest` with npm trusted publishing (environment `npm-publish`). The release goes public once a maintainer approves it with 2FA: `npm stage list @nemi-fi/bb.js`, then `npm stage approve <stage-id>`, or on npmjs.com |
+| `update-readme` | After staging: sets the `@nemi-fi/bb.js` version in both READMEs and commits to `community/v6` with `[skip ci]` |
 
 ## Building locally
 
