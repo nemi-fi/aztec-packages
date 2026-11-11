@@ -39,10 +39,16 @@ drop_upstream_workflows() {
     xargs -r git rm -q -f --sparse --
 }
 
+# The root README describes this build, not upstream.
+keep_readme() {
+  git checkout -q HEAD -- README.md
+}
+
 if ! git merge-base --is-ancestor "$TAG" HEAD; then
   git merge --no-ff --no-commit "$TAG" || true
   git rev-parse -q --verify MERGE_HEAD >/dev/null || die "merging $TAG failed before any conflict resolution"
   drop_upstream_workflows
+  keep_readme
   conflicts=$(git diff --name-only --diff-filter=U)
   if [[ -n "$conflicts" ]]; then
     echo "Conflicts merging $TAG. Resolve them, 'git commit', then run: community/update-upstream.sh $TAG" >&2
